@@ -9,6 +9,9 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.TextView;
 
+import static edu.buffalo.cse.cse486586.groupmessenger2.data.GroupMessengerContract.GroupMessengerEntry.KEY_FIELD;
+import static edu.buffalo.cse.cse486586.groupmessenger2.data.GroupMessengerContract.GroupMessengerEntry.VALUE_FIELD;
+
 /**
  * OnPTestClickListener demonstrates how to access a ContentProvider. First, please read 
  * 
@@ -31,8 +34,6 @@ public class OnPTestClickListener implements OnClickListener {
 
     private static final String TAG = OnPTestClickListener.class.getName();
     private static final int TEST_CNT = 50;
-    private static final String KEY_FIELD = "key";
-    private static final String VALUE_FIELD = "value";
 
     private final TextView mTextView;
     private final ContentResolver mContentResolver;
