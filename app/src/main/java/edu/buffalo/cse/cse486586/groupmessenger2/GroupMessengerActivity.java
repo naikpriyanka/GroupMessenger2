@@ -24,15 +24,19 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 
+import edu.buffalo.cse.cse486586.groupmessenger2.model.Message;
+import edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType;
+
 import static edu.buffalo.cse.cse486586.groupmessenger2.data.GroupMessengerContract.BASE_CONTENT_URI;
 import static edu.buffalo.cse.cse486586.groupmessenger2.data.GroupMessengerContract.GroupMessengerEntry.KEY_FIELD;
 import static edu.buffalo.cse.cse486586.groupmessenger2.data.GroupMessengerContract.GroupMessengerEntry.VALUE_FIELD;
+import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.MESSAGE;
+import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.getEnumBy;
 
 /**
  * GroupMessengerActivity is the main Activity for the assignment.
- * 
- * @author stevko
  *
+ * @author stevko
  */
 public class GroupMessengerActivity extends Activity {
 
@@ -43,7 +47,11 @@ public class GroupMessengerActivity extends Activity {
     static final String REMOTE_PORT3 = "11120";
     static final String REMOTE_PORT4 = "11124";
     static final int SERVER_PORT = 10000;
+
     static int keyCount = 0;
+    static int msgSeq = 0;
+    static int agreedSeq = 0;
+    static int proposedSeq = 0;
 
     static final List<String> clientPorts = new ArrayList() {{
         add(REMOTE_PORT0);
@@ -145,6 +153,21 @@ public class GroupMessengerActivity extends Activity {
                         Socket socket = serverSocket.accept();
                         DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
                         String msgReceived = in.readUTF();
+                        String[] msgPacket = msgReceived.split(":");
+                        MessageType msgType = getEnumBy(msgPacket[0]);
+                        switch (msgType) {
+                            case MESSAGE:
+                                handleMessage(msgReceived);
+                                break;
+
+                            case PROPOSED:
+                                handleProposal(msgReceived);
+                                break;
+
+                            case AGREED:
+                                handleAgreement(msgReceived);
+                                break;
+                        }
                         /*
                          * Added message to the content values with the key as keyCount
                          * These values will be processed by the content resolver to be inserted in the database
@@ -166,6 +189,18 @@ public class GroupMessengerActivity extends Activity {
             }
         }
 
+        private void handleMessage(String msgReceived) {
+
+        }
+
+        private void handleProposal(String msgReceived) {
+
+        }
+
+        private void handleAgreement(String msgReceived) {
+
+        }
+
     }
 
     private class ClientTask extends AsyncTask<String, Void, Void> {
@@ -179,18 +214,20 @@ public class GroupMessengerActivity extends Activity {
                     String remotePort = clientPorts.get(i);
                     //Create client socket with that remote port number
                     Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(remotePort));
+                    socket.setSoTimeout(500); //To detect failure of node after 500ms
                     //Get message
                     String msgToSend = msgs[0];
                     //Create an output data stream
+                    Message message = new Message(MESSAGE, remotePort, msgToSend, ++msgSeq);
                     DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                     //Write message on the output stream
-                    out.writeUTF(msgToSend);
+                    out.writeUTF(message.toString());
                     //Flush the output stream
                     out.flush();
                 } catch (UnknownHostException e) {
-                    Log.e(TAG, "ClientTask UnknownHostException");
+                    Log.e(TAG, "ClientTask UnknownHostException" + e);
                 } catch (IOException e) {
-                    Log.e(TAG, "ClientTask socket IOException");
+                    Log.e(TAG, "ClientTask socket IOException" + e);
                 }
             }
             return null;
