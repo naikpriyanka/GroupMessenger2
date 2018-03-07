@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,6 +55,7 @@ public class GroupMessengerActivity extends Activity {
     static final int SERVER_PORT = 10000;
 
     static int keyCount = 0;
+    static int failedAVD = 0;
     static int msgSeq = 0;
     static int agreedSeq = 0;
     static int proposedSeq = 0;
@@ -169,64 +171,70 @@ public class GroupMessengerActivity extends Activity {
                         MessageType msgType = getEnumBy(msgPacket[0]);
                         int msgID;
                         String sender;
-                        switch (msgType) {
-                            case MESSAGE:
-                                System.out.println("In messages");
-                                String msg = msgPacket[1];
-                                msgID = Integer.parseInt(msgPacket[2]);
-                                sender = msgPacket[3];
-                                String receiver = msgPacket[4];
-                                System.out.println("Message : " + msgReceived);
-                                System.out.println("Prveious Proposed Sequence number " + proposedSeq);
-                                proposedSeq = Math.max(proposedSeq, agreedSeq) + 1;
-                                System.out.println("Proposed Sequence number " + proposedSeq);
-                                //Create an output data stream to send propose message
-                                DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-                                /*
-                                 * Create a propose message to be sent to the sender
-                                 * Send the message with a new proposed sequence number
-                                 */
-                                Message proposedMsg = new Message(PROPOSED, msgID, proposedSeq, receiver);
-                                //Write the message on the output stream
-                                out.writeUTF(proposedMsg.toString());
-                                //Create a message by setting it as not be delivered yet
-                                Message message = new Message(msg, msgID, sender, receiver, false);
-                                //Add the message to the hold-back queue
-                                holdbackQueue.add(message);
-                                displayHoldbackQueue();
-                                break;
+                        if (msgType != null) {
+                            switch (msgType) {
+                                case MESSAGE:
+                                    System.out.println("In messages");
+                                    String msg = msgPacket[1];
+                                    msgID = Integer.parseInt(msgPacket[2]);
+                                    sender = msgPacket[3];
+                                    String receiver = msgPacket[4];
+                                    System.out.println("Message : " + msgReceived);
+                                    System.out.println("Previous Proposed Sequence number " + proposedSeq);
+                                    proposedSeq = Math.max(proposedSeq, agreedSeq) + 1;
+                                    System.out.println("Proposed Sequence number " + proposedSeq);
+                                    //Create an output data stream to send propose message
+                                    DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                                    /*
+                                     * Create a propose message to be sent to the sender
+                                     * Send the message with a new proposed sequence number
+                                     */
+                                    Message proposedMsg = new Message(PROPOSED, msgID, proposedSeq, receiver);
+                                    //Write the message on the output stream
+                                    out.writeUTF(proposedMsg.toString());
+                                    //Create a message by setting it as not be delivered yet
+                                    Message message = new Message(msg, msgID, sender, receiver, false);
+                                    //Add the message to the hold-back queue
+                                    holdbackQueue.add(message);
+                                    displayHoldbackQueue();
+                                    System.out.println("Failed AVD" + failedAVD);
+                                    break;
 
-                            case AGREED:
-                                System.out.println("In agreed");
-                                msgID = Integer.parseInt(msgPacket[1]);
-                                sender = msgPacket[2];
-                                int a = Integer.parseInt(msgPacket[3]);
-                                String agreedSender = msgPacket[5];
-                                //Update the agreed sequence number
-                                System.out.println("Previous Agreed Sequence " + agreedSeq);
-                                agreedSeq = Math.max(agreedSeq, a);
-                                System.out.println("Agreed Sequence from sender " + a);
-                                System.out.println("Agreed Sender " + agreedSender + "Actual Sender " + sender);
-                                System.out.println("Message : " + msgReceived);
-                                System.out.println("Agreed Sequence " + agreedSeq);
-                                reorderQueue(msgID, sender, a, agreedSender);
-                                displayHoldbackQueue();
-                                //Iterate over the delivery queue to save messages in db
-                                while (!holdbackQueue.isEmpty() && holdbackQueue.peek().isToBeDelivered()) {
-                                    //Remove the first element from the queue
-                                    Message m = holdbackQueue.poll();
-                                    System.out.println("Delivery Message " + m.toString());
-                                    //Insert the key and the value in the database
-                                    ContentValues values = new ContentValues();
-                                    values.put(KEY_FIELD, keyCount);
-                                    values.put(VALUE_FIELD, m.getMsg());
-                                    getContentResolver().insert(BASE_CONTENT_URI, values);
-                                    keyCount++;
-                                }
-                                break;
+                                case AGREED:
+                                    System.out.println("In agreed");
+                                    msgID = Integer.parseInt(msgPacket[1]);
+                                    sender = msgPacket[2];
+                                    int a = Integer.parseInt(msgPacket[3]);
+                                    String agreedSender = msgPacket[5];
+                                    //Update the agreed sequence number
+                                    System.out.println("Previous Agreed Sequence " + agreedSeq);
+                                    agreedSeq = Math.max(agreedSeq, a);
+                                    System.out.println("Agreed Sequence from sender " + a);
+                                    System.out.println("Agreed Sender " + agreedSender + "Actual Sender " + sender);
+                                    System.out.println("Message : " + msgReceived);
+                                    System.out.println("Agreed Sequence " + agreedSeq);
+                                    reorderQueue(msgID, sender, a, agreedSender);
+                                    displayHoldbackQueue();
+                                    System.out.println("Failed AVD" + failedAVD);
+                                    //Iterate over the delivery queue to save messages in db
+                                    while (!holdbackQueue.isEmpty() && holdbackQueue.peek().isToBeDelivered()) {
+                                        //Remove the first element from the queue
+                                        Message m = holdbackQueue.poll();
+                                        System.out.println("Delivery Message " + m.toString());
+                                        //Insert the key and the value in the database
+                                        ContentValues values = new ContentValues();
+                                        values.put(KEY_FIELD, keyCount);
+                                        values.put(VALUE_FIELD, m.getMsg());
+                                        getContentResolver().insert(BASE_CONTENT_URI, values);
+                                        keyCount++;
+                                    }
+                                    break;
 
-                            default:
-                                throw new IllegalArgumentException("Unknown Message type" + msgType);
+                                default:
+                                    throw new IllegalArgumentException("Unknown Message type" + msgType);
+                            }
+                        } else {
+                            throw new IllegalArgumentException("Message type is null");
                         }
                     } else {
                         Log.e(TAG, "The server socket is null");
@@ -273,6 +281,7 @@ public class GroupMessengerActivity extends Activity {
                     String remotePort = clientPorts.get(i);
                     //Create client socket with that remote port number
                     Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(remotePort));
+                    socket.setSoTimeout(50);
                     //Get message
                     String msg = msgs[0];
                     //Get the sender of the message
@@ -287,20 +296,25 @@ public class GroupMessengerActivity extends Activity {
                     out.flush();
 
                     //Get the propose message
-                    //Create an input data stream which will read from the same socket
-                    DataInputStream in = new DataInputStream(socket.getInputStream());
-                    //Read the response from the same socket
-                    String responseMsg = in.readUTF();
-                    System.out.println("Proposed Message " + responseMsg);
-                    //Split the message using the delimiter
-                    String[] proposedMsg = responseMsg.split(DELIMITER);
-                    //Create a message having proposed sequence number and the proposed sender
-                    Message proposedMessage = new Message();
-                    proposedMessage.setSeqNum(Integer.parseInt(proposedMsg[2]));
-                    proposedMessage.setSender(proposedMsg[3]);
-                    //Add the above message in the queue as a proposed message
-                    proposedQueue.add(proposedMessage);
-                    displayProposedMsg();
+                    try {
+                        //Create an input data stream which will read from the same socket
+                        DataInputStream in = new DataInputStream(socket.getInputStream());
+                        //Read the response from the same socket
+                        String responseMsg = in.readUTF();
+                        System.out.println("Proposed Message " + responseMsg);
+                        //Split the message using the delimiter
+                        String[] proposedMsg = responseMsg.split(DELIMITER);
+                        //Create a message having proposed sequence number and the proposed sender
+                        Message proposedMessage = new Message();
+                        proposedMessage.setSeqNum(Integer.parseInt(proposedMsg[2]));
+                        proposedMessage.setSender(proposedMsg[3]);
+                        //Add the above message in the queue as a proposed message
+                        proposedQueue.add(proposedMessage);
+                        displayProposedMsg();
+                    } catch (SocketTimeoutException e) {
+                        failedAVD = Integer.parseInt(remotePort);
+                        Log.e(TAG, "Failed AVD port number " + failedAVD);
+                    }
                     //Close the socket
                     socket.close();
                 } catch (UnknownHostException e) {
