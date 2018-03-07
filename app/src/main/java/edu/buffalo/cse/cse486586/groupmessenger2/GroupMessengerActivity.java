@@ -201,6 +201,8 @@ public class GroupMessengerActivity extends Activity {
                                 System.out.println("Agreed Sender " + agreedSender + "Actual Sender " + sender);
                                 System.out.println("Message : " + msgReceived);
                                 System.out.println("Agreed Sequence " + agreedSeq);
+                                reorderQueue(msgID, sender, a, agreedSender);
+                                displayHoldbackQueue();
                                 break;
 
                             default:
@@ -211,6 +213,19 @@ public class GroupMessengerActivity extends Activity {
                     }
                 } catch (IOException e) {
                     Log.e(TAG, "Error accepting socket" + e);
+                }
+            }
+        }
+
+        //Method to reorder queue depending on the new agreed sequence number
+        private void reorderQueue(int msgID, String sender, int a, String agreedSender) {
+            for (Message m : holdbackQueue) {
+                if (m.getMsgID() == msgID && m.getSender().equals(sender)) {
+                    holdbackQueue.remove(m);
+                    m.setSeqNum(a);
+                    m.setToBeDelivered(true);
+                    m.setReceiver(agreedSender);
+                    holdbackQueue.add(m);
                 }
             }
         }
