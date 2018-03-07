@@ -1,6 +1,7 @@
 package edu.buffalo.cse.cse486586.groupmessenger2;
 
 import android.app.Activity;
+import android.content.ContentValues;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -28,6 +29,9 @@ import edu.buffalo.cse.cse486586.groupmessenger2.model.Message;
 import edu.buffalo.cse.cse486586.groupmessenger2.model.MessageSequencer;
 import edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType;
 
+import static edu.buffalo.cse.cse486586.groupmessenger2.data.GroupMessengerContract.BASE_CONTENT_URI;
+import static edu.buffalo.cse.cse486586.groupmessenger2.data.GroupMessengerContract.GroupMessengerEntry.KEY_FIELD;
+import static edu.buffalo.cse.cse486586.groupmessenger2.data.GroupMessengerContract.GroupMessengerEntry.VALUE_FIELD;
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.Message.DELIMITER;
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.AGREED;
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.MESSAGE;
@@ -49,7 +53,7 @@ public class GroupMessengerActivity extends Activity {
     static final String REMOTE_PORT4 = "11124";
     static final int SERVER_PORT = 10000;
 
-    static int failedAVD = 0;
+    static int keyCount = 0;
     static int msgSeq = 0;
     static int agreedSeq = 0;
     static int proposedSeq = 0;
@@ -173,6 +177,7 @@ public class GroupMessengerActivity extends Activity {
                                 sender = msgPacket[3];
                                 String receiver = msgPacket[4];
                                 System.out.println("Message : " + msgReceived);
+                                System.out.println("Prveious Proposed Sequence number " + proposedSeq);
                                 proposedSeq = Math.max(proposedSeq, agreedSeq) + 1;
                                 System.out.println("Proposed Sequence number " + proposedSeq);
                                 //Create an output data stream to send propose message
@@ -197,12 +202,27 @@ public class GroupMessengerActivity extends Activity {
                                 sender = msgPacket[2];
                                 int a = Integer.parseInt(msgPacket[3]);
                                 String agreedSender = msgPacket[5];
+                                //Update the agreed sequence number
+                                System.out.println("Previous Agreed Sequence " + agreedSeq);
                                 agreedSeq = Math.max(agreedSeq, a);
+                                System.out.println("Agreed Sequence from sender " + a);
                                 System.out.println("Agreed Sender " + agreedSender + "Actual Sender " + sender);
                                 System.out.println("Message : " + msgReceived);
                                 System.out.println("Agreed Sequence " + agreedSeq);
                                 reorderQueue(msgID, sender, a, agreedSender);
                                 displayHoldbackQueue();
+                                //Iterate over the delivery queue to save messages in db
+                                while (!holdbackQueue.isEmpty() && holdbackQueue.peek().isToBeDelivered()) {
+                                    //Remove the first element from the queue
+                                    Message m = holdbackQueue.poll();
+                                    System.out.println("Delivery Message " + m.toString());
+                                    //Insert the key and the value in the database
+                                    ContentValues values = new ContentValues();
+                                    values.put(KEY_FIELD, keyCount);
+                                    values.put(VALUE_FIELD, m.getMsg());
+                                    getContentResolver().insert(BASE_CONTENT_URI, values);
+                                    keyCount++;
+                                }
                                 break;
 
                             default:
@@ -232,7 +252,7 @@ public class GroupMessengerActivity extends Activity {
 
         //Display holdback queue messages
         private void displayHoldbackQueue() {
-            for(Message m : holdbackQueue) {
+            for (Message m : holdbackQueue) {
                 System.out.println("Holdback Message in Queue" + m.toString());
             }
         }
@@ -267,33 +287,20 @@ public class GroupMessengerActivity extends Activity {
                     out.flush();
 
                     //Get the propose message
-                    try {
-                        //Create an input data stream which will read from the same socket
-                        DataInputStream in = new DataInputStream(socket.getInputStream());
-                        //Read the response from the same socket
-                        String responseMsg = in.readUTF();
-                        System.out.println("Proposed Message " + responseMsg);
-                        //Split the message using the delimiter
-                        String[] proposedMsg = responseMsg.split(DELIMITER);
-                        /*
-                         * Create a message having proposed sequence number and the proposed sender
-                         */
-                        Message proposedMessage = new Message();
-                        proposedMessage.setSeqNum(Integer.parseInt(proposedMsg[2]));
-                        proposedMessage.setSender(proposedMsg[3]);
-                        //Add the above message in the queue as a proposed message
-                        proposedQueue.add(proposedMessage);
-                        displayProposedMsg();
-                    } catch (IOException e) {
-                        /*
-                         * If the reading from the socket fails the code will throw an exception
-                         * If the client does not send any acknowledgement message it means that
-                         * the client has stopped responding or working
-                         */
-                        Log.v(TAG, "Failed AVD port number : "+ remotePort);
-                        //Update the failed AVD variable with the port number
-                        failedAVD = Integer.parseInt(remotePort);
-                    }
+                    //Create an input data stream which will read from the same socket
+                    DataInputStream in = new DataInputStream(socket.getInputStream());
+                    //Read the response from the same socket
+                    String responseMsg = in.readUTF();
+                    System.out.println("Proposed Message " + responseMsg);
+                    //Split the message using the delimiter
+                    String[] proposedMsg = responseMsg.split(DELIMITER);
+                    //Create a message having proposed sequence number and the proposed sender
+                    Message proposedMessage = new Message();
+                    proposedMessage.setSeqNum(Integer.parseInt(proposedMsg[2]));
+                    proposedMessage.setSender(proposedMsg[3]);
+                    //Add the above message in the queue as a proposed message
+                    proposedQueue.add(proposedMessage);
+                    displayProposedMsg();
                     //Close the socket
                     socket.close();
                 } catch (UnknownHostException e) {
@@ -332,7 +339,7 @@ public class GroupMessengerActivity extends Activity {
 
         //Display Proposed messages
         private void displayProposedMsg() {
-            for(Message m : proposedQueue) {
+            for (Message m : proposedQueue) {
                 System.out.println("Proposed Message in Queue" + m.toString());
             }
         }
