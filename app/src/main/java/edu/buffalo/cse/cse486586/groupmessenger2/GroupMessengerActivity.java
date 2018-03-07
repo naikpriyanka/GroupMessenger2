@@ -29,6 +29,7 @@ import edu.buffalo.cse.cse486586.groupmessenger2.model.MessageSequencer;
 import edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType;
 
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.Message.DELIMITER;
+import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.AGREED;
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.MESSAGE;
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.PROPOSED;
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.getEnumBy;
@@ -179,6 +180,21 @@ public class GroupMessengerActivity extends Activity {
                                 //Write the message on the output stream
                                 out.writeUTF(proposedMsg.toString());
                                 break;
+
+                            case AGREED:
+                                System.out.println("In agreed");
+                                msgID = Integer.parseInt(msgPacket[1]);
+                                sender = msgPacket[2];
+                                int a = Integer.parseInt(msgPacket[3]);
+                                String agreedSender = msgPacket[5];
+                                agreedSeq = Math.max(agreedSeq, a);
+                                System.out.println("Agreed Sender " + agreedSender + "Actual Sender " + sender);
+                                System.out.println("Message : " + msgReceived);
+                                System.out.println("Agreed Sequence " + agreedSeq);
+                                break;
+
+                            default:
+                                throw new IllegalArgumentException("Unknown Message type" + msgType);
                         }
                     } else {
                         Log.e(TAG, "The server socket is null");
@@ -198,7 +214,7 @@ public class GroupMessengerActivity extends Activity {
         @Override
         protected Void doInBackground(String... msgs) {
             String msgID = Integer.toString(++msgSeq) + msgs[1];
-            //Iterate over the client ports to create socket for each client and send messages
+            //Iterate over the client ports to create socket for each client and send messages and receive proposed message
             for (int i = 0; i < clientPorts.size(); i++) {
                 try {
                     //Get the remote port for the client
@@ -242,10 +258,37 @@ public class GroupMessengerActivity extends Activity {
                          * If the client does not send any acknowledgement message it means that
                          * the client has stopped responding or working
                          */
-                        Log.v("Failed AVD port no : ", remotePort);
+                        Log.v(TAG, "Failed AVD port number : "+ remotePort);
                         //Update the failed AVD variable with the port number
                         failedAVD = Integer.parseInt(remotePort);
                     }
+                    //Close the socket
+                    socket.close();
+                } catch (UnknownHostException e) {
+                    Log.e(TAG, "ClientTask UnknownHostException");
+                } catch (IOException e) {
+                    Log.e(TAG, "ClientTask socket IOException");
+                }
+            }
+            //Get the largest proposed message as the next agreed message
+            Message agreedMessage = proposedQueue.peek();
+            //Iterate over the client ports to send agreement message and sequence numbers to other clients
+            for (int i = 0; i < clientPorts.size(); i++) {
+                try {
+                    //Get the client port number
+                    String remotePort = clientPorts.get(i);
+                    //Create socket to send agreement message
+                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(remotePort));
+                    //Get the sender of the message
+                    String sender = msgs[1];
+                    //Create agreed message object
+                    Message msgToSend = new Message(AGREED, Integer.parseInt(msgID), sender, agreedMessage.getSeqNum(), remotePort);
+                    //Create data output stream
+                    DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                    //Write the agreement message on the socket
+                    out.writeUTF(msgToSend.toString() + DELIMITER + agreedMessage.getSender());
+                    //Close the socket
+                    socket.close();
                 } catch (UnknownHostException e) {
                     Log.e(TAG, "ClientTask UnknownHostException");
                 } catch (IOException e) {

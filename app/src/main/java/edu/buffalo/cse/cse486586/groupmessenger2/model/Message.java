@@ -10,11 +10,11 @@ public class Message {
 
     public static final String DELIMITER = ":";
     private MessageType type;
+    private int msgID;
+    private String msg;
     private String sender;
     private String receiver;
-    private String msg;
     private int seqNum;
-    private int msgID;
     private boolean isToBeDelivered;
 
     public Message() {
@@ -109,6 +109,6 @@ public class Message {
         } else if(type == PROPOSED) {
             return type + DELIMITER + msgID + DELIMITER + seqNum + DELIMITER + receiver;
         }
-        return "";
+        return type + ", " + msgID + ", " + msg + ", " + sender + ", " + receiver + ", " + seqNum + ", " + isToBeDelivered;
     }
 }
