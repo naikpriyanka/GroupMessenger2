@@ -1,7 +1,6 @@
 package edu.buffalo.cse.cse486586.groupmessenger2;
 
 import android.app.Activity;
-import android.content.ContentValues;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -23,12 +22,15 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.PriorityQueue;
 
 import edu.buffalo.cse.cse486586.groupmessenger2.model.Message;
+import edu.buffalo.cse.cse486586.groupmessenger2.model.MessageSequencer;
 import edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType;
 
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.Message.DELIMITER;
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.MESSAGE;
+import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.PROPOSED;
 import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.getEnumBy;
 
 /**
@@ -46,7 +48,10 @@ public class GroupMessengerActivity extends Activity {
     static final String REMOTE_PORT4 = "11124";
     static final int SERVER_PORT = 10000;
 
+    static int failedAVD = 0;
     static int msgSeq = 0;
+    static int agreedSeq = 0;
+    static int proposedSeq = 0;
 
     static final List<String> clientPorts = new ArrayList() {{
         add(REMOTE_PORT0);
@@ -55,6 +60,8 @@ public class GroupMessengerActivity extends Activity {
         add(REMOTE_PORT3);
         add(REMOTE_PORT4);
     }};
+
+    MessageSequencer messageSequencer = new MessageSequencer();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -160,6 +167,17 @@ public class GroupMessengerActivity extends Activity {
                                 sender = msgPacket[3];
                                 String receiver = msgPacket[4];
                                 System.out.println("Message : " + msgReceived);
+                                proposedSeq = Math.max(proposedSeq, agreedSeq) + 1;
+                                System.out.println("Proposed Sequence number " + proposedSeq);
+                                //Create an output data stream to send propose message
+                                DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                                /*
+                                 * Create a propose message to be sent to the sender
+                                 * Send the message with a new proposed sequence number
+                                 */
+                                Message proposedMsg = new Message(PROPOSED, msgID, proposedSeq, receiver);
+                                //Write the message on the output stream
+                                out.writeUTF(proposedMsg.toString());
                                 break;
                         }
                     } else {
@@ -174,6 +192,8 @@ public class GroupMessengerActivity extends Activity {
     }
 
     private class ClientTask extends AsyncTask<String, Void, Void> {
+
+        PriorityQueue<Message> proposedQueue = new PriorityQueue<>(10, messageSequencer);
 
         @Override
         protected Void doInBackground(String... msgs) {
@@ -197,6 +217,35 @@ public class GroupMessengerActivity extends Activity {
                     out.writeUTF(msgToSend.toString());
                     //Flush the output stream
                     out.flush();
+
+                    //Get the propose message
+                    try {
+                        //Create an input data stream which will read from the same socket
+                        DataInputStream in = new DataInputStream(socket.getInputStream());
+                        //Read the response from the same socket
+                        String responseMsg = in.readUTF();
+                        System.out.println("Proposed Message " + responseMsg);
+                        //Split the message using the delimiter
+                        String[] proposedMsg = responseMsg.split(DELIMITER);
+                        /*
+                         * Create a message having proposed sequence number and the proposed sender
+                         */
+                        Message proposedMessage = new Message();
+                        proposedMessage.setSeqNum(Integer.parseInt(proposedMsg[2]));
+                        proposedMessage.setSender(proposedMsg[3]);
+                        //Add the above message in the queue as a proposed message
+                        proposedQueue.add(proposedMessage);
+                        displayProposedMsg();
+                    } catch (IOException e) {
+                        /*
+                         * If the reading from the socket fails the code will throw an exception
+                         * If the client does not send any acknowledgement message it means that
+                         * the client has stopped responding or working
+                         */
+                        Log.v("Failed AVD port no : ", remotePort);
+                        //Update the failed AVD variable with the port number
+                        failedAVD = Integer.parseInt(remotePort);
+                    }
                 } catch (UnknownHostException e) {
                     Log.e(TAG, "ClientTask UnknownHostException");
                 } catch (IOException e) {
@@ -204,6 +253,13 @@ public class GroupMessengerActivity extends Activity {
                 }
             }
             return null;
+        }
+
+        //Display Proposed messages
+        private void displayProposedMsg() {
+            for(Message m : proposedQueue) {
+                System.out.println("Proposed Message in Queue" + m.toString());
+            }
         }
 
     }
