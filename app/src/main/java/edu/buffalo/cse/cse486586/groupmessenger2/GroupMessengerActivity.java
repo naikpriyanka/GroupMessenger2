@@ -64,6 +64,11 @@ public class GroupMessengerActivity extends Activity {
 
     MessageSequencer messageSequencer = new MessageSequencer();
 
+    /*
+     * https://docs.oracle.com/javase/7/docs/api/java/util/PriorityQueue.html
+     */
+    PriorityQueue<Message> holdbackQueue = new PriorityQueue<>(10, messageSequencer);
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -179,6 +184,11 @@ public class GroupMessengerActivity extends Activity {
                                 Message proposedMsg = new Message(PROPOSED, msgID, proposedSeq, receiver);
                                 //Write the message on the output stream
                                 out.writeUTF(proposedMsg.toString());
+                                //Create a message by setting it as not be delivered yet
+                                Message message = new Message(msg, msgID, sender, receiver, false);
+                                //Add the message to the hold-back queue
+                                holdbackQueue.add(message);
+                                displayHoldbackQueue();
                                 break;
 
                             case AGREED:
@@ -202,6 +212,13 @@ public class GroupMessengerActivity extends Activity {
                 } catch (IOException e) {
                     Log.e(TAG, "Error accepting socket" + e);
                 }
+            }
+        }
+
+        //Display holdback queue messages
+        private void displayHoldbackQueue() {
+            for(Message m : holdbackQueue) {
+                System.out.println("Holdback Message in Queue" + m.toString());
             }
         }
 
