@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +43,12 @@ import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.getEnu
  *
  * @author stevko
  */
+
+/*
+ * The algorithm for the ISIS algorithm has been referred from
+ * https://www.cse.buffalo.edu/~eblanton/course/cse586/materials/2018S/12-multicast2.pdf
+ * https://www.slideshare.net/wahabtl/chapter-11-41405769
+ */
 public class GroupMessengerActivity extends Activity {
 
     static final String TAG = GroupMessengerActivity.class.getSimpleName();
@@ -54,10 +59,19 @@ public class GroupMessengerActivity extends Activity {
     static final String REMOTE_PORT4 = "11124";
     static final int SERVER_PORT = 10000;
 
+    //Sequence to insert data in db
     static int keyCount = 0;
+
+    //Used to store the failed AVDs ID
     static int failedAVD = 0;
+
+    //Used to keep the latest message sequence number present for that process
     static int msgSeq = 0;
+
+    //Used to keep the latest agreed sequence number present for that process
     static int agreedSeq = 0;
+
+    //Used to keep the latest proposed sequence number present for that process
     static int proposedSeq = 0;
 
     static final List<String> clientPorts = new ArrayList() {{
@@ -68,11 +82,13 @@ public class GroupMessengerActivity extends Activity {
         add(REMOTE_PORT4);
     }};
 
+    //Comparator used to sequence messages using the sequence number and the sender port
     MessageSequencer messageSequencer = new MessageSequencer();
 
     /*
-     * https://docs.oracle.com/javase/7/docs/api/java/util/PriorityQueue.html
+     * Referred from : https://docs.oracle.com/javase/7/docs/api/java/util/PriorityQueue.html
      */
+    //Used to store message to be held back and then send after getting the agreement from all the processes
     PriorityQueue<Message> holdbackQueue = new PriorityQueue<>(10, messageSequencer);
 
     @Override
@@ -166,8 +182,10 @@ public class GroupMessengerActivity extends Activity {
                     if (serverSocket != null) {
                         Socket socket = serverSocket.accept();
                         DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+                        //Get message from the input stream
                         String msgReceived = in.readUTF();
                         String[] msgPacket = msgReceived.split(DELIMITER);
+                        //Get the message type from the message string
                         MessageType msgType = getEnumBy(msgPacket[0]);
                         int msgID;
                         String sender;
@@ -198,6 +216,7 @@ public class GroupMessengerActivity extends Activity {
                                     holdbackQueue.add(message);
                                     displayHoldbackQueue();
                                     System.out.println("Failed AVD" + failedAVD);
+                                    removeMessagesFromFailedAVD();
                                     break;
 
                                 case AGREED:
@@ -216,6 +235,7 @@ public class GroupMessengerActivity extends Activity {
                                     reorderQueue(msgID, sender, a, agreedSender);
                                     displayHoldbackQueue();
                                     System.out.println("Failed AVD" + failedAVD);
+                                    removeMessagesFromFailedAVD();
                                     //Iterate over the delivery queue to save messages in db
                                     while (!holdbackQueue.isEmpty() && holdbackQueue.peek().isToBeDelivered()) {
                                         //Remove the first element from the queue
@@ -249,11 +269,26 @@ public class GroupMessengerActivity extends Activity {
         private void reorderQueue(int msgID, String sender, int a, String agreedSender) {
             for (Message m : holdbackQueue) {
                 if (m.getMsgID() == msgID && m.getSender().equals(sender)) {
+                    //Remove the holdback message queue
                     holdbackQueue.remove(m);
+                    //Update the sequence number and mark the message as to be delivered
                     m.setSeqNum(a);
                     m.setToBeDelivered(true);
                     m.setReceiver(agreedSender);
+                    //Add it back to the queue
                     holdbackQueue.add(m);
+                }
+            }
+        }
+
+        //Method to remove messages from the failed AVD
+        private void removeMessagesFromFailedAVD() {
+            if (failedAVD != 0) {
+                for (Message m : holdbackQueue) {
+                    //remove the messages from failed AVD
+                    if (Integer.parseInt(m.getSender()) == failedAVD) {
+                        holdbackQueue.remove(m);
+                    }
                 }
             }
         }
@@ -269,10 +304,15 @@ public class GroupMessengerActivity extends Activity {
 
     private class ClientTask extends AsyncTask<String, Void, Void> {
 
+        /*
+         * Referred from : https://docs.oracle.com/javase/7/docs/api/java/util/PriorityQueue.html
+         */
+        //Priority queue to store the proposed messages
         PriorityQueue<Message> proposedQueue = new PriorityQueue<>(10, messageSequencer);
 
         @Override
         protected Void doInBackground(String... msgs) {
+            //Used to identify messages by this message ID
             String msgID = Integer.toString(++msgSeq) + msgs[1];
             //Iterate over the client ports to create socket for each client and send messages and receive proposed message
             for (int i = 0; i < clientPorts.size(); i++) {
@@ -281,7 +321,6 @@ public class GroupMessengerActivity extends Activity {
                     String remotePort = clientPorts.get(i);
                     //Create client socket with that remote port number
                     Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(remotePort));
-                    socket.setSoTimeout(50);
                     //Get message
                     String msg = msgs[0];
                     //Get the sender of the message
@@ -311,16 +350,25 @@ public class GroupMessengerActivity extends Activity {
                         //Add the above message in the queue as a proposed message
                         proposedQueue.add(proposedMessage);
                         displayProposedMsg();
-                    } catch (SocketTimeoutException e) {
+                    } catch (IOException e) {
+                        /*
+                         * If the reading from the socket fails the code will throw an exception
+                         * If the client does not send any acknowledgement message it means that
+                         * the client has stopped responding or working
+                         */
                         failedAVD = Integer.parseInt(remotePort);
                         Log.e(TAG, "Failed AVD port number " + failedAVD);
                     }
+                    //Wait for 200ms before closing the socket in order to receive any remaining messages
+                    Thread.sleep(200);
                     //Close the socket
                     socket.close();
                 } catch (UnknownHostException e) {
                     Log.e(TAG, "ClientTask UnknownHostException");
                 } catch (IOException e) {
                     Log.e(TAG, "ClientTask socket IOException");
+                } catch (InterruptedException e) {
+                    Log.e(TAG, "Thread was interrupted while sleeping");
                 }
             }
             //Get the largest proposed message as the next agreed message
@@ -340,12 +388,18 @@ public class GroupMessengerActivity extends Activity {
                     DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                     //Write the agreement message on the socket
                     out.writeUTF(msgToSend.toString() + DELIMITER + agreedMessage.getSender());
+                    //Flush the output stream
+                    out.flush();
+                    //Wait for 200ms before closing the socket in order to receive any remaining messages
+                    Thread.sleep(200);
                     //Close the socket
                     socket.close();
                 } catch (UnknownHostException e) {
                     Log.e(TAG, "ClientTask UnknownHostException");
                 } catch (IOException e) {
                     Log.e(TAG, "ClientTask socket IOException");
+                } catch (InterruptedException e) {
+                    Log.e(TAG, "Thread was interrupted while sleeping");
                 }
             }
             return null;

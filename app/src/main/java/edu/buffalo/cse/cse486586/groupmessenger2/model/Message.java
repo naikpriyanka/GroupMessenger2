@@ -4,23 +4,41 @@ import static edu.buffalo.cse.cse486586.groupmessenger2.model.MessageType.*;
 
 /**
  * Created by priyankanaik on 03/03/2018.
+ *
+ *
+ * This class is used to store the messages using the Message type and other fields
  */
-
 public class Message {
 
+    //Used to separate fields of the message
     public static final String DELIMITER = ":";
+
+    //Used to store the message type
     private MessageType type;
+
+    //Used to store the message ID
     private int msgID;
+
+    //Used to store the message text
     private String msg;
+
+    //Used to store the sender of the message
     private String sender;
+
+    //Used to store the receiver of the message
     private String receiver;
+
+    //Used to store the sequence number of the message
     private int seqNum;
+
+    //Used to mark the message as can be delivered or not
     private boolean isToBeDelivered;
 
     public Message() {
 
     }
 
+    //This constructor is used for MESSAGE type message
     public Message(MessageType type, String msg, int msgID, String sender, String receiver) {
         this.type = type;
         this.sender = sender;
@@ -29,6 +47,7 @@ public class Message {
         this.msgID = msgID;
     }
 
+    //This constructor is used for AGREED type message
     public Message(MessageType type, int msgID, String sender, int agreedSeq, String receiver) {
         this.type = type;
         this.sender = sender;
@@ -37,6 +56,7 @@ public class Message {
         this.seqNum = agreedSeq;
     }
 
+    //This constructor is used for PROPOSED type message
     public Message(MessageType type, int msgID, int proposedSeq, String receiver) {
         this.type = type;
         this.receiver = receiver;
@@ -44,6 +64,7 @@ public class Message {
         this.seqNum = proposedSeq;
     }
 
+    ////This constructor is used for putting the messages on the queue
     public Message(String msg, int msgID, String sender, String receiver, boolean isToBeDelivered) {
         this.sender = sender;
         this.msg = msg;
@@ -100,6 +121,10 @@ public class Message {
         this.isToBeDelivered = toBeDelivered;
     }
 
+    /*
+     * Overrided this method by separating required field by DELIMITER
+     * The message string is decided by the type of the message
+     */
     @Override
     public String toString() {
         if(type == MESSAGE) {
