@@ -359,8 +359,8 @@ public class GroupMessengerActivity extends Activity {
                         failedAVD = Integer.parseInt(remotePort);
                         Log.e(TAG, "Failed AVD port number " + failedAVD);
                     }
-                    //Wait for 200ms before closing the socket in order to receive any remaining messages
-                    Thread.sleep(200);
+                    //Wait for 100ms before closing the socket in order to receive any remaining messages
+                    Thread.sleep(100);
                     //Close the socket
                     socket.close();
                 } catch (UnknownHostException e) {
@@ -390,8 +390,8 @@ public class GroupMessengerActivity extends Activity {
                     out.writeUTF(msgToSend.toString() + DELIMITER + agreedMessage.getSender());
                     //Flush the output stream
                     out.flush();
-                    //Wait for 200ms before closing the socket in order to receive any remaining messages
-                    Thread.sleep(200);
+                    //Wait for 300ms before closing the socket in order to receive any remaining messages
+                    Thread.sleep(300);
                     //Close the socket
                     socket.close();
                 } catch (UnknownHostException e) {
