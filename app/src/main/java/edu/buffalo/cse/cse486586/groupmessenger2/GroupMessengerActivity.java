@@ -197,6 +197,7 @@ public class GroupMessengerActivity extends Activity {
                                     msgID = Integer.parseInt(msgPacket[2]);
                                     sender = msgPacket[3];
                                     String receiver = msgPacket[4];
+                                    failedAVD = Integer.parseInt(msgPacket[5]);
                                     proposedSeq = Math.max(proposedSeq, agreedSeq) + 1;
                                     //Create an output data stream to send propose message
                                     DataOutputStream out = new DataOutputStream(socket.getOutputStream());
@@ -219,6 +220,7 @@ public class GroupMessengerActivity extends Activity {
                                     sender = msgPacket[2];
                                     int a = Integer.parseInt(msgPacket[3]);
                                     String agreedSender = msgPacket[5];
+                                    failedAVD = Integer.parseInt(msgPacket[6]);
                                     //Update the agreed sequence number
                                     agreedSeq = Math.max(agreedSeq, a);
                                     reorderQueue(msgID, sender, a, agreedSender);
@@ -317,7 +319,7 @@ public class GroupMessengerActivity extends Activity {
                     //Create an output data stream
                     DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                     //Write message on the output stream
-                    out.writeUTF(msgToSend.toString());
+                    out.writeUTF(msgToSend.toString() + DELIMITER + failedAVD);
                     //Flush the output stream
                     out.flush();
 
@@ -379,7 +381,7 @@ public class GroupMessengerActivity extends Activity {
                     //Create data output stream
                     DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                     //Write the agreement message on the socket
-                    out.writeUTF(msgToSend.toString() + DELIMITER + agreedMessage.getSender());
+                    out.writeUTF(msgToSend.toString() + DELIMITER + agreedMessage.getSender() + DELIMITER + failedAVD);
                     //Flush the output stream
                     out.flush();
                     //Wait for 300ms before closing the socket in order to receive any remaining messages
