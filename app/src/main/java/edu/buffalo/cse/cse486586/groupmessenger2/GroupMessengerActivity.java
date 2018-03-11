@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
@@ -192,15 +193,11 @@ public class GroupMessengerActivity extends Activity {
                         if (msgType != null) {
                             switch (msgType) {
                                 case MESSAGE:
-                                    System.out.println("In messages");
                                     String msg = msgPacket[1];
                                     msgID = Integer.parseInt(msgPacket[2]);
                                     sender = msgPacket[3];
                                     String receiver = msgPacket[4];
-                                    System.out.println("Message : " + msgReceived);
-                                    System.out.println("Previous Proposed Sequence number " + proposedSeq);
                                     proposedSeq = Math.max(proposedSeq, agreedSeq) + 1;
-                                    System.out.println("Proposed Sequence number " + proposedSeq);
                                     //Create an output data stream to send propose message
                                     DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                                     /*
@@ -214,33 +211,22 @@ public class GroupMessengerActivity extends Activity {
                                     Message message = new Message(msg, msgID, sender, receiver, false);
                                     //Add the message to the hold-back queue
                                     holdbackQueue.add(message);
-                                    displayHoldbackQueue();
-                                    System.out.println("Failed AVD" + failedAVD);
                                     removeMessagesFromFailedAVD();
                                     break;
 
                                 case AGREED:
-                                    System.out.println("In agreed");
                                     msgID = Integer.parseInt(msgPacket[1]);
                                     sender = msgPacket[2];
                                     int a = Integer.parseInt(msgPacket[3]);
                                     String agreedSender = msgPacket[5];
                                     //Update the agreed sequence number
-                                    System.out.println("Previous Agreed Sequence " + agreedSeq);
                                     agreedSeq = Math.max(agreedSeq, a);
-                                    System.out.println("Agreed Sequence from sender " + a);
-                                    System.out.println("Agreed Sender " + agreedSender + "Actual Sender " + sender);
-                                    System.out.println("Message : " + msgReceived);
-                                    System.out.println("Agreed Sequence " + agreedSeq);
                                     reorderQueue(msgID, sender, a, agreedSender);
-                                    displayHoldbackQueue();
-                                    System.out.println("Failed AVD" + failedAVD);
                                     removeMessagesFromFailedAVD();
                                     //Iterate over the delivery queue to save messages in db
                                     while (!holdbackQueue.isEmpty() && holdbackQueue.peek().isToBeDelivered()) {
                                         //Remove the first element from the queue
                                         Message m = holdbackQueue.poll();
-                                        System.out.println("Delivery Message " + m.toString());
                                         //Insert the key and the value in the database
                                         ContentValues values = new ContentValues();
                                         values.put(KEY_FIELD, keyCount);
@@ -316,11 +302,12 @@ public class GroupMessengerActivity extends Activity {
             String msgID = Integer.toString(++msgSeq) + msgs[1];
             //Iterate over the client ports to create socket for each client and send messages and receive proposed message
             for (int i = 0; i < clientPorts.size(); i++) {
+                Socket socket = null;
                 try {
                     //Get the remote port for the client
                     String remotePort = clientPorts.get(i);
                     //Create client socket with that remote port number
-                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(remotePort));
+                    socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(remotePort));
                     //Get message
                     String msg = msgs[0];
                     //Get the sender of the message
@@ -340,7 +327,6 @@ public class GroupMessengerActivity extends Activity {
                         DataInputStream in = new DataInputStream(socket.getInputStream());
                         //Read the response from the same socket
                         String responseMsg = in.readUTF();
-                        System.out.println("Proposed Message " + responseMsg);
                         //Split the message using the delimiter
                         String[] proposedMsg = responseMsg.split(DELIMITER);
                         //Create a message having proposed sequence number and the proposed sender
@@ -349,7 +335,6 @@ public class GroupMessengerActivity extends Activity {
                         proposedMessage.setSender(proposedMsg[3]);
                         //Add the above message in the queue as a proposed message
                         proposedQueue.add(proposedMessage);
-                        displayProposedMsg();
                     } catch (IOException e) {
                         /*
                          * If the reading from the socket fails the code will throw an exception
@@ -361,25 +346,32 @@ public class GroupMessengerActivity extends Activity {
                     }
                     //Wait for 100ms before closing the socket in order to receive any remaining messages
                     Thread.sleep(100);
-                    //Close the socket
-                    socket.close();
                 } catch (UnknownHostException e) {
                     Log.e(TAG, "ClientTask UnknownHostException");
                 } catch (IOException e) {
                     Log.e(TAG, "ClientTask socket IOException");
                 } catch (InterruptedException e) {
                     Log.e(TAG, "Thread was interrupted while sleeping");
+                } finally {
+                    if(socket != null) {
+                        try {
+                            socket.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
                 }
             }
             //Get the largest proposed message as the next agreed message
             Message agreedMessage = proposedQueue.peek();
             //Iterate over the client ports to send agreement message and sequence numbers to other clients
             for (int i = 0; i < clientPorts.size(); i++) {
+                Socket socket = null;
                 try {
                     //Get the client port number
                     String remotePort = clientPorts.get(i);
                     //Create socket to send agreement message
-                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(remotePort));
+                    socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(remotePort));
                     //Get the sender of the message
                     String sender = msgs[1];
                     //Create agreed message object
@@ -392,14 +384,20 @@ public class GroupMessengerActivity extends Activity {
                     out.flush();
                     //Wait for 300ms before closing the socket in order to receive any remaining messages
                     Thread.sleep(300);
-                    //Close the socket
-                    socket.close();
                 } catch (UnknownHostException e) {
                     Log.e(TAG, "ClientTask UnknownHostException");
                 } catch (IOException e) {
                     Log.e(TAG, "ClientTask socket IOException");
                 } catch (InterruptedException e) {
                     Log.e(TAG, "Thread was interrupted while sleeping");
+                } finally {
+                    if(socket != null) {
+                        try {
+                            socket.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
                 }
             }
             return null;
